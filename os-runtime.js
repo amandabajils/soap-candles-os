@@ -106,8 +106,9 @@ if(!document.getElementById("os-home-brand-v3")){const st=document.createElement
 .home-tech .home-hero strong{color:#F2F0EF!important}
 .home-tech .home-hero span{color:#F2F0EF!important}
 .home-tech .home-metric:nth-child(1),.home-tech .home-metric:nth-child(3){background:#FFFFFF!important;border-color:#D9D1C6!important}
-.home-tech .home-metric:nth-child(2){background:#C5BDA8!important;border-color:#C5BDA8!important}
-.home-tech .home-metric:nth-child(4){background:#F2F0EF!important;border-color:#C5BDA8!important;color:#3B3520!important}
+.home-tech .home-metric:nth-child(2){background:#656E5A!important;border-color:#656E5A!important;color:#F2F0EF!important}
+.home-tech .home-metric:nth-child(2) strong,.home-tech .home-metric:nth-child(2) span{color:#F2F0EF!important}
+.home-tech .home-metric:nth-child(4){background:#FFFFFF!important;border-color:#D9D1C6!important;color:#3B3520!important}
 .home-tech .home-metric:nth-child(4) strong{color:#3B3520!important}
 .home-tech .home-panel:nth-child(2){background:#FFFFFF!important;border-color:#D9D1C6!important}
 .home-tech .home-panel:nth-child(1){background:#FFFFFF!important}
@@ -119,8 +120,8 @@ if(!document.getElementById("os-home-brand-v3")){const st=document.createElement
 .home-tech h1{font-size:31px!important}
 @media(max-width:700px){.home-tech .home-hero-next{text-align:left;border-left:0;border-top:1px solid #C5BDA866;padding:12px 0 0;min-width:0}}
 .home-tech .home-shortcuts{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
-.home-tech .home-shortcuts button{border:1px solid #C5BDA8;background:#fff;color:#3B3520;border-radius:8px;padding:11px 16px;font:500 12px Inter,sans-serif;cursor:pointer}
-.home-tech .home-shortcuts button:hover{background:#C5BDA8}
+.home-tech .home-shortcuts button{border:1px solid #656E5A;background:#fff;color:#3B3520;border-radius:8px;padding:11px 16px;font:500 12px Inter,sans-serif;cursor:pointer}
+.home-tech .home-shortcuts button:hover{background:#E5E9E2}
 `;document.head.appendChild(st)}
 const nextSession=future[0]||null;
 const nextCapacity=nextSession?capacityFor(nextSession.id):null;
