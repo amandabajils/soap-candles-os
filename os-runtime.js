@@ -28,39 +28,7 @@ function demandLabel(s){const c=capacityFor(s.id),total=c?Number(c.live_expected
 function listing(rows){return rows.length?rows.map(s=>'<div class="os-list"><div><strong>'+fmt(s.starts_at)+'</strong><div class="os-muted">'+esc(s.title||"Taller")+' · '+esc(s.status)+(instructorFor(s.id)?' · '+esc(instructorFor(s.id)):'')+'</div></div><div class="os-actions"><span class="os-status">'+demandLabel(s)+(actualFor(s.id)!==undefined?" · "+actualFor(s.id)+" asist.":"")+'</span>'+btn("Ver","session:"+s.id,"alt")+"</div></div>").join(""):'<p class="os-muted">No hay talleres en este periodo.</p>'}
 function current(){const d=state.date;if(state.layout==="month")return [new Date(d.getFullYear(),d.getMonth(),1),new Date(d.getFullYear(),d.getMonth()+1,1)];if(state.layout==="week"){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()-((d.getDay()+6)%7));return [x,new Date(x.getFullYear(),x.getMonth(),x.getDate()+7)]}return [new Date(d.getFullYear(),d.getMonth(),d.getDate()),new Date(d.getFullYear(),d.getMonth(),d.getDate()+1)]}
 function inPeriod(s){const [a,b]=current(),k=day(s.starts_at);const f=x=>x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate());return k>=f(a)&&k<f(b)}
-function calendar(){
-const y=state.date.getFullYear(),m=state.date.getMonth(),now=new Date();
-const rows=state.sessions.filter(s=>s.status!=="cancelled"&&inPeriod(s));
-const past=s=>s.status==="completed"||new Date(s.starts_at)<now;
-const booked=s=>totalDemand(s.id);
-const cap=s=>Math.max(1,Number(s.capacity)||1);
-const done=rows.filter(past).length, seats=rows.reduce((n,s)=>n+booked(s),0);
-const capacity=rows.reduce((n,s)=>n+cap(s),0);
-const occupancy=capacity?Math.round(seats/capacity*100):0;
-const summary='<div class="cal-kpis"><div><span>▦</span><strong>'+rows.length+'</strong><small>Sesiones</small></div><div><span>♙</span><strong>'+seats+'</strong><small>Reservas</small></div><div><span class="cal-ring" style="--fill:'+Math.min(100,occupancy)+'%"></span><strong>'+occupancy+'%</strong><small>Ocupación media</small></div></div>';
-const header=label("Calendario","Talleres y reservas",admin()?btn("+ Nuevo taller","new-session"):"")+summary;
-const controls='<div class="cal-controls"><div class="cal-month">'+btn("‹","prev","alt")+'<strong>'+new Intl.DateTimeFormat("es-ES",{month:"long",year:"numeric"}).format(state.date)+'</strong>'+btn("›","next","alt")+btn("Hoy","today","alt")+'</div><div class="cal-switch">'+[["month","Mes"],["week","Semana"],["day","Día"]].map(v=>btn(v[1],"layout:"+v[0],state.layout===v[0]?"":"alt")).join("")+'</div></div>';
-let cells="";
-if(state.layout==="month"){
-const shift=(new Date(y,m,1).getDay()+6)%7,last=new Date(y,m+1,0).getDate();
-cells=["LUN","MAR","MIÉ","JUE","VIE","SÁB","DOM"].map(t=>'<div class="cal-weekday">'+t+'</div>').join("");
-for(let i=0;i<shift;i++)cells+='<div class="os-day cal-empty"></div>';
-for(let n=1;n<=last;n++){
-const d=y+"-"+pad(m+1)+"-"+pad(n);
-const items=state.sessions.filter(s=>s.status!=="cancelled"&&day(s.starts_at)===d);
-const today=day(now)===d;
-cells+='<div class="os-day cal-day'+(today?' cal-today':'')+'"><span class="cal-date">'+n+'</span>'+items.map(s=>{
-const status=s.status==="draft"?"draft":past(s)?"completed":booked(s)>cap(s)?"overbooked":booked(s)>=cap(s)?"full":"upcoming";
-const pct=Math.min(100,Math.round(booked(s)/cap(s)*100));
-return '<button class="os-event cal-event '+status+'" data-key="session:'+s.id+'"><span class="cal-event-head"><span class="cal-event-icon">'+(status==="completed"?"✓":status==="draft"?"◌":"♧")+'</span><span class="cal-event-time">'+tm(s.starts_at)+'</span></span><span class="cal-event-count">'+booked(s)+'/'+cap(s)+(booked(s)>cap(s)?' +'+(booked(s)-cap(s)):'')+'</span><span class="cal-progress"><i style="width:'+pct+'%"></i></span></button>';
-}).join("")+'</div>';
-}
-}else{cells=listing(rows)}
-const legend='<div class="cal-legend"><span><i class="cal-dot upcoming"></i> Próximo</span><span><i class="cal-dot completed"></i> Realizado</span><span><i class="cal-dot draft"></i> Borrador</span><span><i class="cal-dot overbooked"></i> Sobreaforo</span></div>';
-const pending=admin()&&state.mode==="live"?(state.syncEvents||[]).filter(e=>e.processing_status==="needs_review"):[];
-const warning=pending.length?'<div class="cal-warning">Reservas Cowlendar pendientes de vincular: '+pending.length+'</div>':"";
-return '<div class="os-calendar-view cal-modern">'+warning+header+controls+'<div class="cal-calendar">'+(state.layout==="month"?'<div class="cal-grid">'+cells+'</div>':cells)+'</div>'+legend+'<details class="cal-details"><summary>Sesiones del periodo · '+rows.length+'</summary><div class="os-card">'+listing(rows.slice().sort((a,b)=>a.starts_at.localeCompare(b.starts_at)))+'</div></details></div>';
-}
+function calendar(){const y=state.date.getFullYear(),m=state.date.getMonth();let cells="";if(state.layout==="month"){const shift=(new Date(y,m,1).getDay()+6)%7,last=new Date(y,m+1,0).getDate();cells=["L","M","X","J","V","S","D"].map(t=>'<div style="text-align:center;color:#7a8b7d;font-size:11px">'+t+"</div>").join("");for(let i=0;i<shift;i++)cells+='<div class="os-day empty"></div>';for(let n=1;n<=last;n++){const d=y+"-"+pad(m+1)+"-"+pad(n);cells+='<div class="os-day"><strong style="font-size:12px">'+n+"</strong>"+state.sessions.filter(s=>s.status!=="cancelled"&&day(s.starts_at)===d).map(s=>'<button class="os-event '+(s.status==="draft"?"draft":"")+'" data-key="session:'+s.id+'">'+tm(s.starts_at)+" · "+demandLabel(s)+"</button>").join("")+"</div>"}}else cells=listing(state.sessions.filter(s=>s.status!=="cancelled"&&inPeriod(s)));const pending=admin()&&state.mode==="live"?(state.syncEvents||[]).filter(e=>e.processing_status==="needs_review"):[];const pendingBanner=pending.length?'<div class="os-card" style="border-left:4px solid #c88a2a"><strong>Reservas Cowlendar pendientes de vincular: '+pending.length+'</strong><p class="os-muted">Han llegado automáticamente, pero la fecha no coincide con una sesión activa del OS. No se han modificado aforos ni reservas. Comprueba estas fechas en Cowlendar:</p>'+pending.map(e=>'<div>'+esc(e.event_type)+" · "+esc(e.booking_starts_at?new Date(e.booking_starts_at).toLocaleString("es-ES",{timeZone:"Europe/Madrid",dateStyle:"short",timeStyle:"short"}):"sin fecha")+"</div>").join("")+"</div>":"";return pendingBanner+label("Calendario","Histórico operativo desde el 1 de octubre de 2026",admin()?btn("Generar mes","generate","alt")+btn("Nuevo taller","new-session"):"")+'<div class="os-card"><div class="os-bar"><div class="os-actions">'+btn("‹","prev","alt")+'<strong>'+new Intl.DateTimeFormat("es-ES",{month:"long",year:"numeric"}).format(state.date)+'</strong>'+btn("›","next","alt")+btn("Hoy","today","alt")+'</div><div class="os-actions">'+[["month","Mes"],["week","Semana"],["day","Día"]].map(v=>btn(v[1],"layout:"+v[0],state.layout===v[0]?"":"alt")).join("")+"</div></div>"+(state.layout==="month"?'<div class="os-grid">'+cells+"</div>":cells)+'</div><div class="os-card"><h2>Sesiones del periodo</h2>'+listing(state.sessions.filter(s=>s.status!=="cancelled"&&inPeriod(s)).sort((a,b)=>a.starts_at.localeCompare(b.starts_at)))+"</div>"}
 function dashboard(){
 const future=state.sessions.filter(s=>s.status==="scheduled"&&new Date(s.starts_at)>=new Date()).sort((a,b)=>a.starts_at.localeCompare(b.starts_at));
 const rs=state.reservations.filter(r=>r.status==="confirmed"&&day(state.sessions.find(s=>s.id===r.session_id)?.starts_at||"1970-01-01")>=HISTORY_START);
