@@ -678,7 +678,8 @@ async function loadInstructorPayments(){
  const q=await db.from("os_instructor_monthly_payments").select("*").eq("service_month",month+"-01").order("instructor");
  if(q.error)throw q.error;state.instructorPayments=q.data||[];
 }
-function instructorPaymentsPage(){\n const money=n=>Number(n||0).toLocaleString("es-ES",{style:"currency",currency:"EUR"});
+function instructorPaymentsPage(){
+ const money=n=>Number(n||0).toLocaleString("es-ES",{style:"currency",currency:"EUR"});
  if(state.mode!=="live"||!admin())return label("Instructores","Accede como administradora para consultar los pagos reales")+'<div class="os-card">Los pagos y las facturas son privados.</div>';
  const a=state.instructorPayments||[],total=a.reduce((s,x)=>s+Number(x.amount_due_eur||0),0),paid=a.filter(x=>x.payment_status==="paid").reduce((s,x)=>s+Number(x.amount_due_eur||0),0);
  return label("Instructores · Pagos","Facturación mensual agrupada por instructora · tarifas actuales por asistentes",btn("Actualizar","refresh","alt"))+
