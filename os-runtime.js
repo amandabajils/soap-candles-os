@@ -100,15 +100,16 @@ if(!document.getElementById("os-home-finance-v2")){const st=document.createEleme
 if(!document.getElementById("os-home-brand-v3")){const st=document.createElement("style");st.id="os-home-brand-v3";st.textContent=`
 .os-side .os-brand-home{display:block;width:100%;background:transparent;border:0;color:inherit;text-align:left;font:500 27px/1.2 'EB Garamond',serif;cursor:pointer;padding:0;margin:0 0 5px}
 .os-side .os-brand-home:hover{opacity:.8}
-.home-tech .home-hero{background:#9E7250!important;border:1px solid #9E7250!important;color:#FFFFFF!important}
-.home-tech .home-hero strong{color:#FFFFFF!important}
+.os-side{background:#816143!important}
+.os-side:has(~ .os-main .home-tech){background:#816143!important}
+.home-tech .home-hero{background:#816143!important;border:1px solid #816143!important;color:#F2F0EF!important}
+.home-tech .home-hero strong{color:#F2F0EF!important}
 .home-tech .home-hero span{color:#F2F0EF!important}
-.home-tech .home-metric:nth-child(1){background:#FFFFFF!important;border-color:#D9D1C6!important}
-.home-tech .home-metric:nth-child(2){background:#B99779!important;border-color:#B99779!important}
-.home-tech .home-metric:nth-child(3){background:#FFFFFF!important;border-color:#D9D1C6!important}
+.home-tech .home-metric:nth-child(1),.home-tech .home-metric:nth-child(3){background:#FFFFFF!important;border-color:#D9D1C6!important}
+.home-tech .home-metric:nth-child(2){background:#C5BDA8!important;border-color:#C5BDA8!important}
 .home-tech .home-metric:nth-child(4){background:#F2F0EF!important;border-color:#C5BDA8!important;color:#3B3520!important}
 .home-tech .home-metric:nth-child(4) strong{color:#3B3520!important}
-.home-tech .home-panel:nth-child(2){background:#D9C3AD!important;border-color:#B99779!important}
+.home-tech .home-panel:nth-child(2){background:#FFFFFF!important;border-color:#D9D1C6!important}
 .home-tech .home-panel:nth-child(1){background:#FFFFFF!important}
 .home-tech .home-pill{background:#656E5A!important}
 .home-tech .home-hero{padding:19px 24px!important;margin-bottom:12px!important}
