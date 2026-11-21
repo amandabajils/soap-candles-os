@@ -122,6 +122,33 @@ if(!document.getElementById("os-home-brand-v3")){const st=document.createElement
 .home-tech .home-shortcuts{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
 .home-tech .home-shortcuts button{border:1px solid #656E5A;background:#fff;color:#3B3520;border-radius:8px;padding:11px 16px;font:500 12px Inter,sans-serif;cursor:pointer}
 .home-tech .home-shortcuts button:hover{background:#E5E9E2}
+
+/* Unified Inicio visual system: restrained surfaces, clear hierarchy and consistent controls */
+.os-main:has(.home-tech){padding:24px clamp(18px,2.4vw,38px) 44px!important}
+.home-tech{max-width:1480px;margin:auto}
+.home-tech .home-top{margin-bottom:16px!important;border-bottom:1px solid #E3E0DC!important}
+.home-tech .home-hero{border-radius:14px!important;min-height:108px;box-shadow:none!important}
+.home-tech .home-metrics{gap:12px!important;margin-bottom:14px!important}
+.home-tech .home-metric{border-radius:12px!important;min-height:112px!important;padding:18px 20px!important}
+.home-tech .home-metric span{font:500 11px/1.5 Inter,sans-serif!important;letter-spacing:.01em}
+.home-tech .home-metric strong{font:500 33px/1.15 'EB Garamond',serif!important;margin-top:9px!important}
+.home-tech .home-panels{gap:14px!important}
+.home-tech .home-panel{border-radius:12px!important;padding:20px!important;min-height:185px}
+.home-tech .home-panel h2{font:500 23px/1.2 'EB Garamond',serif!important;margin-bottom:10px!important}
+.home-tech .home-list-row,.home-tech .home-alert{border-top:1px solid #E3E0DC!important;padding:13px 0!important}
+.home-tech .home-alert strong{font-weight:600}
+.home-tech .home-alert small,.home-tech .home-list-row small{color:#6B665F!important;line-height:1.45}
+.home-tech .home-alert.danger{border-left:3px solid #9E7250!important;padding-left:11px!important}
+.home-tech .home-actions .os-btn,.home-tech .home-shortcuts button,.home-tech .home-alert .os-btn{border-radius:8px!important;font:500 12px Inter,sans-serif!important;min-height:34px;transition:background .15s ease,border-color .15s ease}
+.home-tech .home-shortcuts{gap:10px!important;margin-top:14px!important}
+.home-tech .home-shortcuts button{border-color:#D9D1C6!important;background:#fff!important;color:#3B3520!important;padding:10px 15px!important}
+.home-tech .home-shortcuts button:hover{background:#F2F0EF!important;border-color:#656E5A!important}
+.home-tech .home-panel .os-table th{background:#F2F0EF!important;color:#3B3520!important}
+.home-tech .home-panel .os-table td{border-color:#E3E0DC!important}
+.home-tech .home-pill{border-radius:6px!important}
+.os-side .os-brand-home{margin:0 8px 24px!important;width:calc(100% - 16px)!important;text-transform:uppercase;font-size:27px!important;letter-spacing:-.024em}
+.os-side .os-brand-home:focus-visible,.home-tech button:focus-visible{outline:2px solid #656E5A!important;outline-offset:3px}
+@media(max-width:750px){.home-tech .home-metric{min-height:94px!important;padding:14px!important}.home-tech .home-metric strong{font-size:28px!important}.home-tech .home-panel{padding:16px!important}.home-tech .home-hero{padding:18px!important}.home-tech .home-list-row{grid-template-columns:75px minmax(0,1fr) auto!important;gap:8px!important}}
 `;document.head.appendChild(st)}
 const nextSession=future[0]||null;
 const nextCapacity=nextSession?capacityFor(nextSession.id):null;
