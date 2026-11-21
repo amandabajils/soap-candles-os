@@ -39,15 +39,50 @@ const limited=caps.filter(({s,c})=>isPublic(s)&&Number(c.live_over_capacity||0)=
 const full=caps.filter(({s,c})=>isPublic(s)&&Number(c.live_over_capacity||0)===0&&Number(c.live_safe_remaining)===0);
 const knownCancelled=new Set((state.changes||[]).filter(x=>x.status==="verified"&&["cancelled","refunded"].includes(x.change_type)).map(x=>x.external_reference));
 const pending=(state.reviews||[]).filter(x=>x.review_status==="pending"&&!knownCancelled.has(x.external_reference));
-const alertRow=(heading,detail,kind,action)=>'<div class="os-banner '+kind+'" style="margin:9px 0;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><div><strong>'+esc(heading)+'</strong><div style="margin-top:3px">'+esc(detail)+'</div></div>'+(action?btn("Ver taller","session:"+action,"alt"):'')+'</div>';
-let notices='<div class="os-card" style="margin-bottom:18px"><h2>Avisos de reservas</h2><p class="os-muted">Sesiones futuras · Shopify y Atrápalo solo lectura · Últimas plazas: 3 o menos</p>';
+const occupied=rs.reduce((a,r)=>a+Number(r.seats||0),0);
+const alertRow=(heading,detail,kind,action)=>'<div class="home-alert '+(kind||"")+'"><div><strong>'+esc(heading)+'</strong><small>'+esc(detail)+'</small></div>'+(action?btn("Ver taller","session:"+action,"alt"):"")+'</div>';
+let notices='';
 notices+=over.map(({s,c})=>alertRow("Sobreaforo · "+fmt(s.starts_at),"Reservadas "+c.live_expected+" / "+c.capacity+" · Exceso de "+c.live_over_capacity+" plazas","danger",s.id)).join("");
-notices+=pending.length?'<div class="os-banner danger"><strong>'+pending.length+' incidencia(s) de importación pendientes</strong> · Revisar en la sección Revisión.</div>':"";
-notices+=limited.map(({s,c})=>alertRow("Últimas "+c.live_safe_remaining+" plaza(s) · "+fmt(s.starts_at),"Reservadas "+c.live_expected+" / "+c.capacity,"",s.id)).join("");
+if(pending.length)notices+=alertRow(pending.length+" incidencias de importación pendientes","Revisar las reservas que necesitan validación","danger");
+notices+=limited.map(({s,c})=>alertRow("Últimas "+c.live_safe_remaining+" plazas · "+fmt(s.starts_at),"Reservadas "+c.live_expected+" / "+c.capacity,"",s.id)).join("");
 notices+=full.map(({s,c})=>alertRow("Completo · "+fmt(s.starts_at),"Reservadas "+c.live_expected+" / "+c.capacity,"",s.id)).join("");
-if(!over.length&&!pending.length&&!limited.length&&!full.length)notices+='<p class="os-muted">Sin avisos de reservas para las próximas sesiones.</p>';
-notices+='</div>';
-return label("Dashboard","Seguimiento operativo desde el 1 de octubre de 2026",btn("Actualizar","refresh","alt"))+notices+'<div class="os-metrics">'+[["Talleres próximos",future.length],["Reservas confirmadas",rs.length],["Plazas confirmadas",rs.reduce((a,r)=>a+Number(r.seats),0)],["Casi llenos",limited.length]].map(([k,v])=>'<div class="os-card"><span class="os-muted">'+k+'</span><strong>'+v+"</strong></div>").join("")+'</div><div class="os-card"><h2>Próximos talleres</h2>'+listing(future.slice(0,8))+"</div>"
+if(!notices)notices='<div class="home-empty">No hay alertas de reservas en las próximas sesiones.</div>';
+if(!document.getElementById("os-home-tech-v1")){const st=document.createElement("style");st.id="os-home-tech-v1";st.textContent=`
+.os-shell:has(.home-tech){background:#B4A28E!important}
+.os-main:has(.home-tech){max-width:none!important;padding:24px clamp(18px,2.4vw,38px) 55px!important;background:#B4A28E!important}
+.os-side:has(~ .os-main .home-tech){background:#3B3520!important}
+.home-tech{color:#3B3520;font-family:Inter,sans-serif;font-weight:400}
+.home-tech .home-top{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid #81614355;padding:0 0 18px;margin-bottom:20px}
+.home-tech .home-eyebrow{font:500 10px Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#594D3D}
+.home-tech h1{font:500 36px/1.1 'EB Garamond',serif;margin:4px 0;color:#3B3520}
+.home-tech .home-status{display:flex;align-items:center;gap:8px;font-size:11px;color:#3B3520}
+.home-tech .home-dot{width:7px;height:7px;background:#656E5A;border-radius:50%;display:inline-block}
+.home-tech .home-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.home-tech .home-metric{border:1px solid #81614360;background:#C5BDA8;padding:16px 18px;min-height:100px}
+.home-tech .home-metric span{display:block;font-size:11px;letter-spacing:.02em}
+.home-tech .home-metric strong{display:block;font:500 34px/1.2 'EB Garamond',serif;margin-top:10px}
+.home-tech .home-panels{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(290px,1fr);gap:12px;align-items:start}
+.home-tech .home-panel{background:#C5BDA8;border:1px solid #81614360;padding:18px;min-width:0}
+.home-tech .home-panel h2{font:500 24px 'EB Garamond',serif;margin:0 0 14px;color:#3B3520}
+.home-tech .home-panel-header{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.home-tech .home-panel .os-tablewrap{background:transparent!important;border:0!important}
+.home-tech .home-panel .os-table th{background:#B4A28E!important;color:#3B3520!important}
+.home-tech .home-panel .os-table td{border-color:#81614344!important}
+.home-tech .home-alert{display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:1px solid #81614355;padding:12px 0;font-size:12px}
+.home-tech .home-alert small{display:block;margin-top:4px;font-size:11px;color:#5F5547}
+.home-tech .home-alert.danger{border-left:3px solid #9E7250;padding-left:10px}
+.home-tech .home-empty{padding:12px 0;font-size:12px;color:#5F5547}
+.home-tech .home-list{display:flex;flex-direction:column;gap:0}
+.home-tech .home-list-row{display:grid;grid-template-columns:110px 1fr auto;gap:12px;align-items:center;border-top:1px solid #81614355;padding:12px 0;font-size:12px}
+.home-tech .home-list-row small{font-size:11px;color:#5F5547}
+.home-tech .home-pill{font-size:11px;background:#656E5A;color:#F2F0EF;padding:5px 8px;white-space:nowrap}
+.home-tech .home-actions{display:flex;gap:8px;flex-wrap:wrap}
+.home-tech .home-actions .os-btn{border-radius:4px!important}
+@media(max-width:1100px){.home-tech .home-panels{grid-template-columns:1fr}}
+@media(max-width:750px){.home-tech .home-metrics{grid-template-columns:repeat(2,1fr)}.home-tech .home-top{align-items:start;flex-direction:column}.home-tech .home-list-row{grid-template-columns:80px 1fr auto}}
+`;document.head.appendChild(st)}
+const rows=future.slice(0,7).map(s=>{const c=capacityFor(s.id);return '<div class="home-list-row"><small>'+esc(fmt(s.starts_at))+'</small><span>'+esc(s.title||"Taller")+'</span><span class="home-pill">'+(c?esc(String(c.live_expected)+" / "+String(c.capacity)):"—")+'</span></div>'}).join("");
+return '<div class="home-tech"><div class="home-top"><div><span class="home-eyebrow">SOAP & CANDLES / OPERATIONS SYSTEM</span><h1>Inicio</h1><span style="font-size:12px">Visión general de reservas y actividad del estudio</span></div><div class="home-actions"><span class="home-status"><i class="home-dot"></i>Datos del OS</span>'+btn("Actualizar","refresh","alt")+'</div></div><div class="home-metrics">'+[["Próximos talleres",future.length],["Reservas confirmadas",rs.length],["Plazas confirmadas",occupied],["Últimas plazas",limited.length]].map(([k,v])=>'<div class="home-metric"><span>'+k+'</span><strong>'+v+'</strong></div>').join("")+'</div><div class="home-panels"><section class="home-panel"><div class="home-panel-header"><h2>Próximos talleres</h2><span class="home-eyebrow">AGENDA</span></div><div class="home-list">'+(rows||'<div class="home-empty">No hay talleres próximos.</div>')+'</div></section><section class="home-panel"><div class="home-panel-header"><h2>Centro de alertas</h2><span class="home-eyebrow">EN DIRECTO</span></div>'+notices+'</section></div></div>';
 }
 function legacyReservations(){const rs=state.reservations.filter(r=>(state.status==="all"||r.status===state.status)&&(!state.filter||r.booking_name.toLowerCase().includes(state.filter.toLowerCase())));return label("Reservas","Confirmaciones, plazas y cambios",admin()?btn("Nueva reserva","new-reservation"):"")+'<div class="os-card"><div class="os-actions" style="margin-bottom:12px"><input style="max-width:220px" id="search" placeholder="Buscar cliente" value="'+esc(state.filter)+'"><select id="status"><option value="all">Todos</option><option value="confirmed" '+(state.status==="confirmed"?"selected":"")+'>Confirmadas</option><option value="cancelled" '+(state.status==="cancelled"?"selected":"")+'>Canceladas</option></select></div><div class="os-tablewrap"><table class="os-table"><thead><tr><th>Cliente</th><th>Fecha</th><th>Origen</th><th>Plazas</th><th>Estado</th><th></th></tr></thead><tbody>'+rs.map(r=>{const s=state.sessions.find(s=>s.id===r.session_id);return '<tr><td>'+esc(r.booking_name)+'</td><td>'+(s?fmt(s.starts_at):"—")+'</td><td>'+esc(r.source)+'</td><td>'+esc(acquisitionFor(r.id))+'</td><td>'+r.seats+'</td><td>'+r.status+'</td><td>'+btn("Ver","reservation:"+r.id,"alt")+"</td></tr>"}).join("")+"</tbody></table></div></div>"}
 
