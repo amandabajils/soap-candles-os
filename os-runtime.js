@@ -129,6 +129,11 @@ function financeCoverage(month){
  const bookings=new Map((state.financeCowlendar||[]).map(b=>["cowlendar:"+b.booking_id,b]));
  const orderId=value=>String(value||"").split("/gid://shopify/LineItem/")[0].split("/").pop();
  const orders=new Map((state.shopifyOrders||[]).map(o=>[orderId(o.order_gid),o]));
+ const manualCounts=new Map();
+ for(const r of state.reservations){
+  if(r.source==="manual"&&r.status==="confirmed")manualCounts.set(r.session_id,(manualCounts.get(r.session_id)||0)+1);
+ }
+ const eventSessions=new Set((state.financeEventReviews||[]).filter(e=>manualCounts.get(e.session_id)===1&&e.operational_review?.invoice_net!=null).map(e=>e.session_id));
  const ledger=new Map();
  for(const a of state.financeAtrLedger||[]){
   if(a.os_reservation_id)ledger.set(a.os_reservation_id,ledger.has(a.os_reservation_id)?null:a);
@@ -140,7 +145,7 @@ function financeCoverage(month){
   const order=r.source==="shopify"?orders.get(orderId(booking?.order_id||r.external_reference)):null;
   const entry=r.source==="atrapalo"?ledger.get(r.id):null;
   const atrEvidence=entry?.booking_status==="confirmed"&&entry.gross_amount!=null;
-  const status=financials.has(r.id)?"recorded":atrEvidence?"atrapalo":order?"shopify":"missing";
+  const status=financials.has(r.id)?"recorded":r.source==="manual"&&eventSessions.has(r.session_id)?"event":atrEvidence?"atrapalo":order?"shopify":"missing";
   const f=financials.get(r.id);
   const fullyRefunded=Number(f?.refunded_amount)>0&&Number(f.refunded_amount)===Number(f.paid_amount);
   return [{r,session,status,order,entry,fullyRefunded}];
@@ -152,16 +157,18 @@ function financeCoveragePanel(month){
  const rows=financeCoverage(month);
  const recorded=rows.filter(x=>x.status==="recorded").length;
  const withEvidence=rows.filter(x=>["atrapalo","shopify"].includes(x.status)).length;
- const pending=rows.filter(x=>x.status!=="recorded");
+ const eventCount=rows.filter(x=>x.status==="event").length;
+ const pending=rows.filter(x=>!["recorded","event"].includes(x.status));
  const review=rows.filter(x=>x.status!=="recorded"||x.fullyRefunded);
  const currency=value=>Number(value).toLocaleString("es-ES",{style:"currency",currency:"EUR"});
  const evidence=x=>{
   if(x.fullyRefunded)return "Reembolso completo · reserva confirmada";
+  if(x.status==="event")return "Facturación en la ficha del evento · cobro por conciliar";
   if(x.status==="atrapalo")return "Atrápalo · "+currency(x.entry.gross_amount)+" de venta bruta";
   if(x.status==="shopify")return "Shopify · "+esc(x.order.order_name||x.order.order_gid)+" · importe por reserva pendiente";
   return "Importe por verificar";
  };
- return '<div class="os-card"><h3>Cobertura financiera de reservas</h3><p class="os-muted">'+rows.length+' confirmadas · '+recorded+' con ficha · '+withEvidence+' con evidencia externa sin ficha · '+(pending.length-withEvidence)+' por verificar</p>'+
+ return '<div class="os-card"><h3>Cobertura financiera de reservas</h3><p class="os-muted">'+rows.length+' confirmadas · '+recorded+' con ficha · '+eventCount+' con facturación en Eventos · '+withEvidence+' con evidencia externa sin ficha · '+(pending.length-withEvidence)+' por verificar</p>'+
  (state.financeEvidenceLoadError?'<p class="os-banner danger">Hay fuentes de evidencia que no se han podido cargar.</p>':"")+
  (review.length?'<div class="os-tablewrap"><table class="os-table"><thead><tr><th>Taller</th><th>Reserva</th><th>Canal</th><th>Evidencia disponible</th></tr></thead><tbody>'+
  review.map(x=>'<tr><td>'+fmt(x.session.starts_at)+'</td><td>'+esc(x.r.booking_name)+'</td><td>'+esc(x.r.source)+'</td><td>'+evidence(x)+'</td></tr>').join("")+'</tbody></table></div>':"")+'</div>';
@@ -220,7 +227,7 @@ function financeEventReview(event){
 function financeMonthlyChecks(month){
  const c=(state.financeOperationalChecks?.close_checks||[]).find(x=>String(x.period).slice(0,7)===month);
  const instructors=(state.financeOperationalChecks?.instructor_checks||[]).find(x=>String(x.service_month).slice(0,7)===month);
- const bookingGaps=financeCoverage(month).filter(x=>x.status!=="recorded"||x.fullyRefunded).length;
+ const bookingGaps=financeCoverage(month).filter(x=>!["recorded","event"].includes(x.status)||x.fullyRefunded).length;
  return {c,instructors,bookingGaps};
 }
 
@@ -1242,7 +1249,7 @@ if(shop.error)throw shop.error;state.shopifyOrders=shop.data||[];
 const [financeBookings,financeLedger,financeEventReviews,financeSettings,financeOperationalChecks]=await Promise.all([
  db.from("os_cowlendar_live_bookings").select("booking_id,order_id").limit(1000),
  db.from("atrapalo_booking_ledger").select("os_reservation_id,booking_status,gross_amount").limit(1000),
- db.from("os_finance_private_events").select("id,operational_review").not("operational_review","is",null).limit(200),
+ db.from("os_finance_private_events").select("id,session_id,operational_review").not("operational_review","is",null).limit(200),
  db.from("os_finance_settings").select("vat_rate,target_margin,default_ticket_gross").eq("id",1).maybeSingle(),
  db.rpc("os_finance_admin_operational_checks")
 ]);
