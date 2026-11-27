@@ -125,7 +125,7 @@ function madridMonth(value=new Date()){
 
 function financeCoverage(month){
  const sessions=new Map(state.sessions.map(s=>[s.id,s]));
- const financials=new Set(state.financials.filter(f=>f.paid_amount!=null).map(f=>f.reservation_id));
+ const financials=new Map(state.financials.filter(f=>f.paid_amount!=null).map(f=>[f.reservation_id,f]));
  const bookings=new Map((state.financeCowlendar||[]).map(b=>["cowlendar:"+b.booking_id,b]));
  const orderId=value=>String(value||"").split("/gid://shopify/LineItem/")[0].split("/").pop();
  const orders=new Map((state.shopifyOrders||[]).map(o=>[orderId(o.order_gid),o]));
@@ -141,7 +141,9 @@ function financeCoverage(month){
   const entry=r.source==="atrapalo"?ledger.get(r.id):null;
   const atrEvidence=entry?.booking_status==="confirmed"&&entry.gross_amount!=null;
   const status=financials.has(r.id)?"recorded":atrEvidence?"atrapalo":order?"shopify":"missing";
-  return [{r,session,status,order,entry}];
+  const f=financials.get(r.id);
+  const fullyRefunded=Number(f?.refunded_amount)>0&&Number(f.refunded_amount)===Number(f.paid_amount);
+  return [{r,session,status,order,entry,fullyRefunded}];
  });
 }
 
@@ -151,16 +153,18 @@ function financeCoveragePanel(month){
  const recorded=rows.filter(x=>x.status==="recorded").length;
  const withEvidence=rows.filter(x=>["atrapalo","shopify"].includes(x.status)).length;
  const pending=rows.filter(x=>x.status!=="recorded");
+ const review=rows.filter(x=>x.status!=="recorded"||x.fullyRefunded);
  const currency=value=>Number(value).toLocaleString("es-ES",{style:"currency",currency:"EUR"});
  const evidence=x=>{
+  if(x.fullyRefunded)return "Reembolso completo · reserva confirmada";
   if(x.status==="atrapalo")return "Atrápalo · "+currency(x.entry.gross_amount)+" de venta bruta";
   if(x.status==="shopify")return "Shopify · "+esc(x.order.order_name||x.order.order_gid)+" · importe por reserva pendiente";
   return "Importe por verificar";
  };
  return '<div class="os-card"><h3>Cobertura financiera de reservas</h3><p class="os-muted">'+rows.length+' confirmadas · '+recorded+' con ficha · '+withEvidence+' con evidencia externa sin ficha · '+(pending.length-withEvidence)+' por verificar</p>'+
  (state.financeEvidenceLoadError?'<p class="os-banner danger">Hay fuentes de evidencia que no se han podido cargar.</p>':"")+
- (pending.length?'<div class="os-tablewrap"><table class="os-table"><thead><tr><th>Taller</th><th>Reserva</th><th>Canal</th><th>Evidencia disponible</th></tr></thead><tbody>'+
- pending.map(x=>'<tr><td>'+fmt(x.session.starts_at)+'</td><td>'+esc(x.r.booking_name)+'</td><td>'+esc(x.r.source)+'</td><td>'+evidence(x)+'</td></tr>').join("")+'</tbody></table></div>':"")+'</div>';
+ (review.length?'<div class="os-tablewrap"><table class="os-table"><thead><tr><th>Taller</th><th>Reserva</th><th>Canal</th><th>Evidencia disponible</th></tr></thead><tbody>'+
+ review.map(x=>'<tr><td>'+fmt(x.session.starts_at)+'</td><td>'+esc(x.r.booking_name)+'</td><td>'+esc(x.r.source)+'</td><td>'+evidence(x)+'</td></tr>').join("")+'</tbody></table></div>':"")+'</div>';
 }
 
 function financeExecutiveCards(month){
