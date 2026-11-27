@@ -791,25 +791,39 @@ function inventory(){
  if(selected==="stock"){
   const mode=state.inventoryStockMode||"active";
   const category=state.inventoryStockCategory||"";
-  const categories=[...new Set(nonEq.map(m=>m.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
-  const visible=nonEq.filter(m=>(!category||m.category===category)&&
-   (mode==="archived"?!m.active:m.active&&(mode!=="pending"||!m.stock_counted)));
-  const quantity=n=>Number(n).toLocaleString("es-ES",{maximumFractionDigits:3});
-  return label("Consumibles","Existencias y movimientos por material",btn("Nuevo material","inv-new")+btn("Actualizar","refresh","alt"))+menu+
+  const categoryOf=m=>m.category||"Sin categoría";
+  const categories=[...new Set(nonEq.map(categoryOf))].sort((a,b)=>a.localeCompare(b,"es"));
+  const grouped=new Map();
+  for(const m of nonEq){
+   const key=categoryOf(m);
+   if(category&&key!==category)continue;
+   if(mode==="archived"?m.active:!m.active||(mode==="pending"&&m.stock_counted))continue;
+   if(!grouped.has(key))grouped.set(key,[]);
+   grouped.get(key).push(m);
+  }
+  const quantity=(n,m)=>Number(n).toLocaleString("es-ES",{maximumFractionDigits:3,useGrouping:true})+' '+esc(m.unit);
+  const row=m=>{
+   const movement=inv.breakdown?.[m.id];
+   const used=movement?Math.max(0,-Number(movement.consumed)):null;
+   const before=movement&&m.stock_counted?Number(movement.net)+used:null;
+   const stock=m.stock_counted?quantity(m.on_hand,m):"Pendiente de recuento";
+   const minimum=Number(m.reorder_at)>0?'<br><small class="os-muted">Mínimo '+quantity(m.reorder_at,m)+'</small>':"";
+   const actions=m.active?btn(m.stock_counted?"Ajustar":"Recuento","inv-count:"+m.id,"alt")+
+    (m.stock_counted?btn("Compra","inv-buy:"+m.id,"alt"):""):"";
+   return '<tr><th scope="row">'+btn(m.name,"inv-ledger:"+m.id,"alt")+'</th>'+
+    '<td>'+(before===null?"—":quantity(before,m))+'</td>'+
+    '<td>'+(used===null?"—":quantity(used,m))+'</td>'+
+    '<td><strong>'+stock+'</strong>'+minimum+'</td><td><div class="os-actions">'+actions+
+    btn("Editar","inv-edit:"+m.id,"alt")+'</div></td></tr>';
+  };
+  return label("Consumibles","Existencias y consumo por categoría",btn("Nuevo material","inv-new")+btn("Actualizar","refresh","alt"))+menu+
    '<div class="os-card"><div class="os-actions">'+
    select("inventoryStockMode","Estado",[["active","Activos"],["pending","Pendientes de recuento"],["archived","Archivados"]],mode)+
    select("inventoryStockCategory","Categoría",[["","Todas"],...categories.map(c=>[c,c])],category)+'</div>'+
-   '<p class="os-muted">'+visible.length+' consumibles</p>'+
-   (visible.length?'<div class="os-tablewrap"><table class="os-table"><thead><tr><th>Material</th><th>Stock actual</th><th>Acciones</th></tr></thead><tbody>'+
-    visible.map(m=>{
-     const balance=m.stock_counted?quantity(m.on_hand)+' '+esc(m.unit):"Pendiente de recuento";
-     const minimum=Number(m.reorder_at)>0?'<br><small class="os-muted">Mínimo '+quantity(m.reorder_at)+' '+esc(m.unit)+'</small>':"";
-     const stockActions=m.active?btn(m.stock_counted?"Ajustar":"Recuento","inv-count:"+m.id,"alt")+
-      (m.stock_counted?btn("Compra","inv-buy:"+m.id,"alt"):""):"";
-     return '<tr><td>'+btn(m.name,"inv-ledger:"+m.id,"alt")+'<br><small class="os-muted">'+esc(m.category||"")+'</small></td>'+
-      '<td><strong>'+balance+'</strong>'+minimum+'</td><td><div class="os-actions">'+stockActions+
-      btn("Editar","inv-edit:"+m.id,"alt")+'</div></td></tr>';
-    }).join("")+'</tbody></table></div>':'<p class="os-muted">No hay consumibles con estos filtros.</p>')+'</div>';
+   '<p class="os-muted">«Había» incluye el recuento de apertura, las entradas y los ajustes. «Se ha gastado» recoge el consumo de talleres registrado.</p>'+
+   (grouped.size?'<div class="os-tablewrap"><table class="os-table"><thead><tr><th>Material</th><th>Había</th><th>Se ha gastado</th><th>Hay ahora</th><th>Acciones</th></tr></thead>'+
+    categories.filter(c=>grouped.has(c)).map(c=>'<tbody><tr><th scope="rowgroup" colspan="5" style="background:var(--cream)">'+esc(c)+'</th></tr>'+
+     grouped.get(c).map(row).join("")+'</tbody>').join("")+'</table></div>':'<p class="os-muted">No hay consumibles con estos filtros.</p>')+'</div>';
  }
 
 if(selected==="equipment"){
