@@ -217,6 +217,41 @@ function financeEventReview(event){
  '<p class="os-muted">'+esc(review.source)+'. Consulta la conciliación para verificar el cobro.</p></section>';
 }
 
+function financeMonthlyChecks(month){
+ const c=(state.financeOperationalChecks?.close_checks||[]).find(x=>String(x.period).slice(0,7)===month);
+ const instructors=(state.financeOperationalChecks?.instructor_checks||[]).find(x=>String(x.service_month).slice(0,7)===month);
+ const bookingGaps=financeCoverage(month).filter(x=>x.status!=="recorded"||x.fullyRefunded).length;
+ return {c,instructors,bookingGaps};
+}
+
+function financeClosePanel(month){
+ if(state.mode!=="live"||!admin())return "";
+ const {c,instructors,bookingGaps}=financeMonthlyChecks(month);
+ if(state.financeOperationalCheckError)return '<div class="os-banner danger">No se han podido cargar las comprobaciones de cierre.</div>';
+ const checks=[
+  ["Reservas con incidencias financieras",bookingGaps,"income"],
+  ["Gastos de Holded por revisar",c?.expenses_need_review,"expenses"],
+  ["Extractos de plataformas por imputar",c?.unallocated_processor_statements,"reconcile"],
+  ["Extractos del periodo",c&&Number(c.processor_statements)===0?"Falta evidencia":null,"reconcile"],
+  ["Pagos a instructoras sin confirmar",instructors?.payments_unconfirmed,"cash"]
+ ];
+ const relevant=checks.filter(([,value])=>value!=null&&value!==0&&value!=="0");
+ return '<section class="os-card"><h3>Control de cierre · '+esc(month)+'</h3>'+
+ '<p class="os-muted">'+(c?.status==="closed"?"Cierre de gestión registrado":"Cierre de gestión abierto")+
+ (relevant.length?" · "+relevant.length+" comprobaciones pendientes.":". La conciliación bancaria y documental se verifica por separado.")+'</p>'+
+ relevant.map(([label,value,tab])=>'<div class="os-home-risk-row"><span>'+label+' · <strong>'+esc(value)+'</strong></span>'+btn("Ver detalle","fint:"+tab,"alt")+'</div>').join("")+'</section>';
+}
+
+function financeInstructorPayables(month){
+ if(state.mode!=="live"||!admin())return "";
+ const {instructors}=financeMonthlyChecks(month);
+ if(!instructors)return "";
+ const amount=instructors.unconfirmed_estimate==null?"—":Number(instructors.unconfirmed_estimate).toLocaleString("es-ES",{style:"currency",currency:"EUR"});
+ return '<section class="os-card"><h3>Instructoras · '+esc(month)+'</h3>'+
+ '<p><strong>'+amount+'</strong> generados en turnos con pago sin confirmar · '+esc(instructors.invoices_missing)+' facturas pendientes de adjuntar · '+esc(instructors.unpriced_shifts||0)+' turnos sin tarifa.</p>'+
+ '<p class="os-muted">Importes de servicio registrados en el OS. Los saldos de Holded y los movimientos del banco se consultan por separado.</p></section>';
+}
+
 function financeExecutiveCards(month){
  const eur=x=>x==null?"Pendiente":Number(x).toLocaleString("es-ES",{style:"currency",currency:"EUR"});
  const period=x=>String(x.period).slice(0,7)===month;
@@ -469,8 +504,9 @@ function financePage(){
   }else if(tab==="workshops"){
  const month=state.financeMonth||madridMonth(),eur=x=>x==null||!Number.isFinite(Number(x))?"—":Number(x).toLocaleString("es-ES",{style:"currency",currency:"EUR"}),pc=x=>x==null?"—":Number(x).toLocaleString("es-ES",{maximumFractionDigits:1})+" %";
  const raw=(state.financeDashboardSessions||[]).filter(x=>String(x.activity_date||"").slice(0,7)===month);
+ const capacityBySession=new Map(state.sessions.map(x=>[x.id,x.capacity]));
  const snapshot=state.financeSnapshot?.sessions||[];
- const snapMap=new Map(snapshot.map(x=>[String(x.session_id),x]));
+ const snapMap=new Map(snapshot.map(x=>[String(x.session_id),{...x,capacity:capacityBySession.get(x.session_id)}]));
  const rows=raw.map(x=>({...x,snapshot:snapMap.get(String(x.session_id))||{}}));
  const totalAtt=rows.reduce((n,x)=>n+Number(x.actual_attendees||0),0),totalRevenue=rows.reduce((n,x)=>n+Number(x.revenue||0),0);
  const valued=rows.filter(x=>x.contribution!=null),totalContribution=valued.reduce((n,x)=>n+Number(x.contribution),0),hasAll=rows.length>0&&valued.length===rows.length;
@@ -480,7 +516,7 @@ function financePage(){
  const grouped={};rows.forEach(x=>{const d=new Date(String(x.activity_date).slice(0,10)+"T12:00:00Z").getUTCDay(),name=({0:"Domingo",5:"Viernes",6:"Sábado"})[d]||"Otros días";(grouped[name]??=[]).push(x)});
  const groupPanel='<div class="tw-card"><div class="tw-kicker">COMPARATIVA POR DÍA</div><h3>¿Qué días funcionan mejor?</h3>'+(Object.keys(grouped).length?Object.entries(grouped).map(([name,rs])=>'<div class="tw-line"><span>'+name+' · '+rs.length+' sesiones · '+rs.reduce((n,x)=>n+Number(x.actual_attendees||0),0)+' asistentes</span><strong>'+eur(rs.reduce((n,x)=>n+Number(x.revenue||0),0))+'</strong></div>').join(""):'<p class="tw-muted">Sin sesiones registradas para el mes.</p>')+'<p class="tw-muted">Comparativa por día de la semana, no por horario: la fuente actual no contiene una hora fiable para todas las sesiones.</p></div>';
  const cards='<div class="tw-kpis">'+[['Talleres realizados',String(rows.length),'Sesiones del periodo'],['Asistentes reales',String(totalAtt),'No confundir con reservas'],['Ingresos estimados',rows.length?eur(totalRevenue):"—",'Sin IVA · por fecha del taller'],['Contribución parcial',valued.length?eur(totalContribution):"—",hasAll?'Antes de comisiones y estructura':'Solo '+valued.length+' de '+rows.length+' sesiones valoradas']].map(([label,value,note])=>'<div class="tw-card tw-kpi"><div class="tw-muted">'+label+'</div><strong>'+value+'</strong><div class="tw-muted">'+note+'</div></div>').join("")+'</div>';
- const detail=x=>{const snap=x.snapshot||{},cost=x.material_wine_cost,staff=x.verified_staff_cost,issues=[];const cap=Number(snap.capacity)>0?Number(snap.capacity):18,estimated=!(Number(snap.capacity)>0),margin=Number(x.revenue)>0&&x.contribution!=null?100*Number(x.contribution)/Number(x.revenue):null;if(x.revenue==null)issues.push("Ingresos pendientes");if(cost==null)issues.push("Materiales sin valorar");if(x.contribution==null)issues.push("Contribución pendiente");if(Number(snap.missing_financial_records||0)>0)issues.push(snap.missing_financial_records+" reservas sin importe");if(Number(snap.unverified_material_lines||0)>0)issues.push(snap.unverified_material_lines+" materiales sin verificar");return '<details class="tw-detail"><summary><span><strong>'+esc(x.activity_date||"—")+'</strong><small>'+esc(x.title||"Taller")+' · '+Number(x.actual_attendees||0)+' asistentes · '+Number(x.actual_attendees||0)+'/'+cap+' plazas'+(estimated?' (aforo estándar)':'')+'</small></span><span class="tw-detail-metrics">'+eur(x.revenue)+' <b>'+eur(x.contribution)+' · '+pc(margin)+'</b></span></summary><div class="tw-detail-body"><div class="tw-line"><span>Ingresos sin IVA · estimación</span><strong>'+eur(x.revenue)+'</strong></div><div class="tw-line"><span>Materiales, vino y limpieza · estimación histórica</span><strong>'+eur(cost)+'</strong></div><div class="tw-line"><span>Personal verificado</span><strong>'+eur(staff)+'</strong></div><div class="tw-line"><span>Contribución antes de comisiones y estructura</span><strong>'+eur(x.contribution)+'</strong></div><div class="tw-line"><span>Ocupación'+(estimated?' · aforo estándar':'')+'</span><strong>'+pc(Number(x.actual_attendees||0)/cap*100)+'</strong></div><div class="tw-line"><span>Margen de contribución</span><strong>'+pc(margin)+'</strong></div><div class="tw-line"><span>Contribución por asistente</span><strong>'+(Number(x.actual_attendees)>0&&x.contribution!=null?eur(Number(x.contribution)/Number(x.actual_attendees)):"—")+'</strong></div><p class="tw-muted">'+(issues.length?'Pendiente: '+esc(issues.join(" · ")):'Sin incidencias detectadas en los campos disponibles.')+'</p><p class="tw-muted">No es beneficio neto: faltan comisiones de pasarela y gastos generales asignados por sesión. La valoración histórica de materiales es estimada.</p></div></details>'};
+ const detail=x=>{const snap=x.snapshot||{},cost=x.material_wine_cost,staff=x.verified_staff_cost,issues=[];const cap=Number(snap.capacity)>0?Number(snap.capacity):null,estimated=cap==null,margin=Number(x.revenue)>0&&x.contribution!=null?100*Number(x.contribution)/Number(x.revenue):null;if(x.revenue==null)issues.push("Ingresos pendientes");if(cost==null)issues.push("Materiales sin valorar");if(x.contribution==null)issues.push("Contribución pendiente");if(Number(snap.missing_financial_records||0)>0)issues.push(snap.missing_financial_records+" reservas sin importe");if(Number(snap.unverified_material_lines||0)>0)issues.push(snap.unverified_material_lines+" materiales sin verificar");return '<details class="tw-detail"><summary><span><strong>'+esc(x.activity_date||"—")+'</strong><small>'+esc(x.title||"Taller")+' · '+Number(x.actual_attendees||0)+' asistentes · '+(estimated?'aforo pendiente':Number(x.actual_attendees||0)+'/'+cap+' plazas')+'</small></span><span class="tw-detail-metrics">'+eur(x.revenue)+' <b>'+eur(x.contribution)+' · '+pc(margin)+'</b></span></summary><div class="tw-detail-body"><div class="tw-line"><span>Ingresos sin IVA · estimación</span><strong>'+eur(x.revenue)+'</strong></div><div class="tw-line"><span>Materiales, vino y limpieza · estimación histórica</span><strong>'+eur(cost)+'</strong></div><div class="tw-line"><span>Personal verificado</span><strong>'+eur(staff)+'</strong></div><div class="tw-line"><span>Contribución antes de comisiones y estructura</span><strong>'+eur(x.contribution)+'</strong></div><div class="tw-line"><span>Ocupación'+(estimated?' · aforo estándar':'')+'</span><strong>'+pc(Number(x.actual_attendees||0)/cap*100)+'</strong></div><div class="tw-line"><span>Margen de contribución</span><strong>'+pc(margin)+'</strong></div><div class="tw-line"><span>Contribución por asistente</span><strong>'+(Number(x.actual_attendees)>0&&x.contribution!=null?eur(Number(x.contribution)/Number(x.actual_attendees)):"—")+'</strong></div><p class="tw-muted">'+(issues.length?'Pendiente: '+esc(issues.join(" · ")):'Sin incidencias detectadas en los campos disponibles.')+'</p><p class="tw-muted">No es beneficio neto: faltan comisiones de pasarela y gastos generales asignados por sesión. La valoración histórica de materiales es estimada.</p></div></details>'};
  const alerts=rows.filter(x=>x.contribution==null||x.revenue==null||Number(x.snapshot?.missing_financial_records||0)>0);
  const css='<style>.workshops-v1{color:#21412D}.workshops-v1 .tw-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.workshops-v1 .tw-hero{background:linear-gradient(115deg,#153B29,#326E4A);color:#fff;border-radius:20px;padding:26px;margin:15px 0}.workshops-v1 .tw-hero h2{font-size:clamp(27px,4vw,42px);margin:8px 0}.workshops-v1 .tw-kicker{font-size:11px;font-weight:750;letter-spacing:.11em;color:#759C7F}.workshops-v1 .tw-hero .tw-kicker{color:#C4E5CC}.workshops-v1 .tw-muted{font-size:12px;line-height:1.55;color:#78897D}.workshops-v1 .tw-hero .tw-muted{color:#D0E8D5}.workshops-v1 .tw-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}.workshops-v1 .tw-card{background:#fff;border:1px solid #DEE9DF;border-radius:16px;padding:19px;margin-bottom:14px;box-shadow:0 4px 20px #173B2308}.workshops-v1 .tw-kpi strong{display:block;font-size:clamp(18px,2.5vw,29px);margin:10px 0}.workshops-v1 .tw-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.workshops-v1 .tw-line{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #E8EEE8;font-size:13px}.workshops-v1 .tw-detail{border:1px solid #E0EAE0;border-radius:13px;margin:9px 0;background:#FBFCFA;overflow:hidden}.workshops-v1 .tw-detail summary{display:flex;justify-content:space-between;gap:15px;cursor:pointer;padding:16px;align-items:center;list-style:none}.workshops-v1 .tw-detail summary::-webkit-details-marker{display:none}.workshops-v1 .tw-detail summary small{display:block;color:#78897D;font-size:12px;margin-top:5px}.workshops-v1 .tw-detail-metrics{display:flex;gap:20px;font-size:13px}.workshops-v1 .tw-detail-metrics b{color:#32764D}.workshops-v1 .tw-detail-body{padding:0 16px 17px}.workshops-v1 select{min-width:175px}@media(max-width:850px){.workshops-v1 .tw-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.workshops-v1 .tw-grid{grid-template-columns:1fr}.workshops-v1 .tw-detail-metrics{flex-direction:column;gap:3px}}</style>';
  body=css+'<div class="workshops-v1"><div class="tw-top"><div><div class="tw-kicker">FINANZAS / ANÁLISIS POR SESIÓN</div><h2>Talleres</h2><div class="tw-muted">¿Qué sesiones aportan más y dónde podemos mejorar?</div></div><label>Mes <input id="finance-month" type="month" min="2026-01" max="2030-12" value="'+esc(month)+'"></label></div>'+
@@ -557,6 +593,8 @@ function financePage(){
   const ticket=Number(settings.default_ticket_gross??38.99),vat=100*Number(settings.vat_rate??.21),margin=100*Number(settings.target_margin??.35);
   body='<div class="os-banner">Simulación con costes editables. Personal estimado a 35 € por monitora y dos monitoras desde 12 asistentes.</div>'+[['Evento privado',[['ev-att','Asistentes',15],['ev-price','Precio por persona sin IVA',40],['ev-mat','Materiales por persona',3],['ev-extra','Catering por persona',6],['ev-venue','Alquiler y otros costes fijos',0],['ev-margin','Margen objetivo (%)',margin]],'ev-out'],['Descuentos',[['dc-price','Precio entrada con IVA',ticket],['dc-vat','IVA (%)',vat],['dc-cost','Coste variable por plaza',3],['dc-discount','Descuento (%)',10],['dc-before','Plazas sin descuento',10],['dc-after','Plazas con descuento',14],['dc-fixed','Costes fijos de sesión',0]],'dc-out'],['Punto de equilibrio',[['be-price','Precio entrada con IVA',ticket],['be-vat','IVA (%)',vat],['be-var','Coste variable por plaza',3],['be-fixed','Costes fijos mensuales',1428.67],['be-sessions','Talleres mensuales',12],['be-cap','Capacidad por taller',18],['be-goal','Beneficio objetivo',2000]],'be-out']].map(([title,fields,out])=>'<div class="os-card"><h3>'+title+'</h3><div class="os-metrics" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">'+fields.map(([id,label,value])=>'<label class="os-field">'+label+'<input data-fin-calc id="'+id+'" type="number" min="0" step="any" value="'+value+'"></label>').join('')+'</div><div id="'+out+'" class="os-banner"></div></div>').join('');
  }
+ if(tab==="overview"||tab==="result")body+=financeClosePanel(state.financeMonth||madridMonth());
+ if(tab==="cash")body+=financeInstructorPayables(state.financeMonth||madridMonth());
  if(tab==="income"||tab==="reconcile")body+=financeCoveragePanel(state.financeMonth||madridMonth());
  return label("Finanzas","Actividad, contabilidad y tesorería",btn("Estado del sistema","nav:system","alt"))+
  '<style>.os-finance{--fin-brown:#816143;--fin-green:#656E5A}.os-finance .os-card{background:#fff}.os-finance .os-card h3{font-family:"EB Garamond",Georgia,serif}.os-finance .os-metrics{grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:12px}.os-finance .fin-hero,.os-finance .cashnew .cashhero{background:var(--fin-green)}.os-finance .fin-dash .fin-eyebrow{letter-spacing:.07em}.os-finance input[type=month]{max-width:100%}</style><div class="os-finance">'+
@@ -1201,12 +1239,15 @@ const monthly=await db.from("os_finance_monthly_references").select("*").order("
 if(monthly.error)throw monthly.error;state.financeReferences=monthly.data||[];
 const shop=await db.from("os_shopify_finance_link").select("*").order("order_created_at",{ascending:false}).limit(500);
 if(shop.error)throw shop.error;state.shopifyOrders=shop.data||[];
-const [financeBookings,financeLedger,financeEventReviews,financeSettings]=await Promise.all([
+const [financeBookings,financeLedger,financeEventReviews,financeSettings,financeOperationalChecks]=await Promise.all([
  db.from("os_cowlendar_live_bookings").select("booking_id,order_id").limit(1000),
  db.from("atrapalo_booking_ledger").select("os_reservation_id,booking_status,gross_amount").limit(1000),
  db.from("os_finance_private_events").select("id,operational_review").not("operational_review","is",null).limit(200),
- db.from("os_finance_settings").select("vat_rate,target_margin,default_ticket_gross").eq("id",1).maybeSingle()
+ db.from("os_finance_settings").select("vat_rate,target_margin,default_ticket_gross").eq("id",1).maybeSingle(),
+ db.rpc("os_finance_admin_operational_checks")
 ]);
+state.financeOperationalChecks=financeOperationalChecks.data||null;
+state.financeOperationalCheckError=Boolean(financeOperationalChecks.error);
 state.financeEventReviews=financeEventReviews.data||[];
 state.financeSettings=financeSettings.data||null;
 state.financeCowlendar=financeBookings.data||[];
