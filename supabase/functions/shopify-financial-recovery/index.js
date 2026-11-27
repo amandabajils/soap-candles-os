@@ -25,18 +25,45 @@ async function fetchJson(url, options) {
   return response.json();
 }
 
+// Static Admin API token if present; otherwise the client credentials grant of the
+// store's own app (tokens last ~24 h, so each invocation requests a fresh one).
+async function shopifyToken(shop) {
+  const fixed = Deno.env.get("SHOPIFY_ADMIN_ACCESS_TOKEN");
+  if (fixed) return fixed;
+  const id = Deno.env.get("SHOPIFY_CLIENT_ID");
+  const secret = Deno.env.get("SHOPIFY_CLIENT_SECRET");
+  if (!id || !secret) throw new Error("client_credentials_missing");
+  const response = await fetch("https://" + shop + "/admin/oauth/access_token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "client_credentials", client_id: id, client_secret: secret }),
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error("token_http_" + response.status);
+  const data = await response.json();
+  if (typeof data.access_token !== "string") throw new Error("token_missing");
+  const scopes = String(data.scope ?? "").split(",");
+  if (!scopes.includes("read_orders")) throw new Error("read_orders_scope_missing");
+  return data.access_token;
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") return reply(405, { error: "method_not_allowed" });
 
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const base = Deno.env.get("SUPABASE_URL");
-  const token = Deno.env.get("SHOPIFY_ADMIN_ACCESS_TOKEN");
   const shop = Deno.env.get("SHOPIFY_SHOP_DOMAIN")?.toLowerCase();
   if (!key || request.headers.get("authorization") !== "Bearer " + key) {
     return reply(401, { error: "unauthorized" });
   }
-  if (!base || !token || !shop || !/^[a-z0-9-]+\.myshopify\.com$/.test(shop)) {
+  if (!base || !shop || !/^[a-z0-9-]+\.myshopify\.com$/.test(shop)) {
     return reply(503, { error: "integration_not_configured" });
+  }
+  let token;
+  try {
+    token = await shopifyToken(shop);
+  } catch (error) {
+    return reply(503, { error: "shopify_token_unavailable", stage: error.message });
   }
 
   // Preview only during the parallel comparison. This worker performs no writes.
