@@ -765,6 +765,13 @@ function inventoryOverview(materials,recipes,menu,active){
  '<p class="os-muted">'+(active?"Descuento por receta activo al finalizar el taller.":"Descuento por receta pendiente de activar.")+'</p>'+
  '<div class="os-actions">'+btn("Ver consumibles","invt:stock")+btn("Ver previsión","invt:forecast","alt")+btn("Comprobar equipamiento","invt:capacity","alt")+'</div></div>';
 }
+document.addEventListener("change",event=>{
+ const name=event.target?.name;
+ if(name!=="inventoryStockMode"&&name!=="inventoryStockCategory")return;
+ state[name]=event.target.value;
+ render();
+ document.querySelector('select[name="'+name+'"]')?.focus();
+});
 function inventory(){
  if(!admin())return label("Inventario","Disponible para administración")+'<div class="os-card">El inventario solo puede gestionarlo administración.</div>';
  if(state.mode==="demo")return label("Inventario","Disponible al entrar con tu cuenta real")+'<div class="os-card">El inventario real está vacío hasta introducir el primer recuento. Entra con tu cuenta administradora para comenzar.</div>';
@@ -782,19 +789,29 @@ function inventory(){
    '</tbody></table></div></div>';
  }
  if(selected==="stock"){
- const low=nonEq.filter(m=>m.stock_counted&&Number(m.on_hand)<=Number(m.reorder_at));
- const quantity=n=>Number(n||0).toLocaleString("es-ES",{maximumFractionDigits:3});
- return label("Inventario","Materiales de Soap & Candles",btn("Nuevo material","inv-new")+btn("Actualizar","refresh","alt"))+menu+msg+
- '<div class="os-metrics">'+[["Consumibles",nonEq.length],["Sin contar",nonEq.filter(m=>!m.stock_counted).length],["Bajo mínimo",low.length]].map(([t,n])=>'<div class="os-card"><span class="os-muted">'+t+'</span><h2>'+n+'</h2></div>').join("")+'</div>'+
- '<div class="os-card"><div class="os-tablewrap"><table class="os-table"><thead><tr><th>Material</th><th>Recuento inicial</th><th>Entradas</th><th>Consumo de talleres</th><th>Otros ajustes</th><th>Stock actual</th><th>Acciones</th></tr></thead><tbody>'+nonEq.map(m=>{
- const b=inv.breakdown?.[m.id]||{}, opening=Number(b.opening||0),entries=Number(b.entries||0),consumed=Number(b.consumed||0);
- const adjustments=Number(b.net||0)-opening-entries-consumed;
- const status=m.stock_counted?'<strong>'+quantity(m.on_hand)+' '+esc(m.unit)+'</strong>':'<strong>Pendiente de recuento</strong>';
- const minimum=m.reorder_at>0?'<br><small class="os-muted">Mínimo '+quantity(m.reorder_at)+' '+esc(m.unit)+'</small>':'';
- return '<tr><td>'+btn(m.name,"inv-ledger:"+m.id,"alt")+'<br><small class="os-muted">'+esc(m.category)+' · '+esc(m.unit)+'</small></td><td>'+(m.stock_counted?quantity(opening):'—')+'</td><td>'+quantity(entries)+'</td><td>'+quantity(consumed)+'</td><td>'+quantity(adjustments)+'</td><td>'+status+minimum+'</td><td>'+btn(m.stock_counted?"Ajustar":"Recuento","inv-count:"+m.id,"alt")+btn("Compra","inv-buy:"+m.id,"alt")+btn("Editar","inv-edit:"+m.id,"alt")+'</td></tr>'
- }).join("")+'</tbody></table></div></div>';
+  const mode=state.inventoryStockMode||"active";
+  const category=state.inventoryStockCategory||"";
+  const categories=[...new Set(nonEq.map(m=>m.category).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+  const visible=nonEq.filter(m=>(!category||m.category===category)&&
+   (mode==="archived"?!m.active:m.active&&(mode!=="pending"||!m.stock_counted)));
+  const quantity=n=>Number(n).toLocaleString("es-ES",{maximumFractionDigits:3});
+  return label("Consumibles","Existencias y movimientos por material",btn("Nuevo material","inv-new")+btn("Actualizar","refresh","alt"))+menu+
+   '<div class="os-card"><div class="os-actions">'+
+   select("inventoryStockMode","Estado",[["active","Activos"],["pending","Pendientes de recuento"],["archived","Archivados"]],mode)+
+   select("inventoryStockCategory","Categoría",[["","Todas"],...categories.map(c=>[c,c])],category)+'</div>'+
+   '<p class="os-muted">'+visible.length+' consumibles</p>'+
+   (visible.length?'<div class="os-tablewrap"><table class="os-table"><thead><tr><th>Material</th><th>Stock actual</th><th>Acciones</th></tr></thead><tbody>'+
+    visible.map(m=>{
+     const balance=m.stock_counted?quantity(m.on_hand)+' '+esc(m.unit):"Pendiente de recuento";
+     const minimum=Number(m.reorder_at)>0?'<br><small class="os-muted">Mínimo '+quantity(m.reorder_at)+' '+esc(m.unit)+'</small>':"";
+     const stockActions=m.active?btn(m.stock_counted?"Ajustar":"Recuento","inv-count:"+m.id,"alt")+
+      (m.stock_counted?btn("Compra","inv-buy:"+m.id,"alt"):""):"";
+     return '<tr><td>'+btn(m.name,"inv-ledger:"+m.id,"alt")+'<br><small class="os-muted">'+esc(m.category||"")+'</small></td>'+
+      '<td><strong>'+balance+'</strong>'+minimum+'</td><td><div class="os-actions">'+stockActions+
+      btn("Editar","inv-edit:"+m.id,"alt")+'</div></td></tr>';
+    }).join("")+'</tbody></table></div>':'<p class="os-muted">No hay consumibles con estos filtros.</p>')+'</div>';
  }
- 
+
 if(selected==="equipment"){
  const data=eq.slice().sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name));
  return label("Inventario de objetos","TODO el equipamiento: mobiliario, cajas, jarras, moldes, herramientas y decoración",btn("Añadir objeto","inv-new-equip"))+menu+
