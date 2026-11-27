@@ -716,14 +716,9 @@ function inventoryForecast(materials, recipes, now=Date.now()){
  return {sessions, guests:demand.reduce((total,s)=>total+s.seats,0), rows};
 }
 function inventoryOverview(materials,recipes,menu,active){
- const now=Date.now(), horizon=now+14*864e5;
- const sessions=state.sessions.filter(s=>{
-  const starts=Date.parse(s.starts_at);
-  return s.status==="scheduled"&&starts>=now&&starts<horizon
-   &&(!s.inventory_recipe_kind||s.inventory_recipe_kind==="standard")
-   &&!/privad|airbus|b2b/i.test(s.title||"");
- });
- const booked=sessions.reduce((sum,s)=>sum+Number(capacityFor(s.id)?.live_expected??occ(s.id)),0);
+ const {sessions,guests:booked,rows}=inventoryForecast(materials,recipes);
+ const shortages=rows.filter(({material,needed})=>material.stock_counted&&needed>Number(material.on_hand))
+  .sort((a,b)=>String(a.runsOut).localeCompare(String(b.runsOut)));
  const full=sessions.reduce((sum,s)=>sum+Number(s.capacity||0),0);
  const consumables=materials.filter(m=>m.active&&m.tracking_mode!=="equipment");
  const rules=recipes.filter(r=>r.workshop_kind==="standard").map(r=>{
@@ -738,7 +733,6 @@ function inventoryOverview(materials,recipes,menu,active){
   return {name:r.material.name,seats};
  }).filter(r=>Number.isFinite(r.seats)).sort((a,b)=>a.seats-b.seats);
  const limit=limits[0];
- const restock=known.filter(r=>Number(r.material.on_hand)<r.perPerson*full+r.fixed);
  const low=consumables.filter(m=>m.stock_counted&&Number(m.reorder_at)>0&&Number(m.on_hand)<=Number(m.reorder_at));
  const remaining=consumables.filter(m=>!m.stock_counted&&!pending.some(r=>r.material.id===m.id));
  const wine=consumables.find(m=>m.name==="Vino semidulce");
@@ -748,10 +742,15 @@ function inventoryOverview(materials,recipes,menu,active){
  const capacityText=limit?(pending.length?"Hasta ":"")+num(limit.seats)+" plazas":"Por comprobar";
  const capacityDetail=limit?"Primer material que se agotaría: "+limit.name:"Hace falta una receta con existencias verificadas.";
  const forecast=sessions.length?num(sessions.length)+" talleres públicos · "+num(full)+" plazas a aforo completo":"Sin talleres estándar programados en este periodo.";
- const status=restock.length?"Reposición necesaria para aforo completo":pending.length?"Cobertura parcial · faltan recuentos":limit&&sessions.length?"Stock de receta suficiente para el aforo previsto":"Revisa la previsión de talleres";
+ const first=shortages[0];
+ const shortfall=({material,needed})=>num(needed-Number(material.on_hand))+" "+material.unit+" de "+material.name;
+ const status=first?"Faltan "+shortfall(first)+" para las reservas actuales":
+  pending.length?"Cobertura parcial · faltan recuentos":limit&&sessions.length?
+  "Stock de receta suficiente para las reservas actuales":"Revisa la previsión de talleres";
  const attention=[
   pending.length?'Recuento prioritario: '+pending.map(r=>r.material.name).join(', '):"",
-  restock.length?'Reposición para cubrir el aforo: '+restock.map(r=>r.material.name).join(', '):"",
+  first?.runsOut?'Primer taller afectado: '+fmt(first.runsOut):"",
+  shortages.length>1?'Otros faltantes: '+shortages.slice(1).map(shortfall).join(' · '):"",
   low.length?'En el mínimo o por debajo: '+low.map(m=>m.name).join(', '):"",
   remaining.length?num(remaining.length)+' consumibles adicionales pendientes de recuento.':""
  ].filter(Boolean);
