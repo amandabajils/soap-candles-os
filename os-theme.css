@@ -253,3 +253,51 @@ html[data-sc] .os-login{border-radius:24px!important;box-shadow:0 30px 80px -40p
 @media (display-mode:standalone){
   html[data-sc] body{overscroll-behavior-y:none}
 }
+
+/* ---------- Reservas ---------- */
+html[data-sc] .os-chip{
+  display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;
+  font-size:11.5px;font-weight:500;line-height:1.5;white-space:nowrap;
+  background:#f1ede6;color:var(--sc-ink);border:1px solid var(--sc-line);
+}
+html[data-sc] .os-chip-confirmed{background:var(--sc-sage-soft);color:#45503a;border-color:rgba(101,110,90,.2)}
+html[data-sc] .os-chip-cancelled{background:#f3efeb;color:var(--sc-muted);text-decoration:line-through}
+html[data-sc] .os-chip-warn{background:var(--sc-warn-soft);color:#8a4f12;border-color:rgba(168,100,27,.25)}
+html[data-sc] .os-chip-shopify{background:#eef3ea;color:#4d6b3a;border-color:rgba(77,107,58,.18)}
+html[data-sc] .os-chip-atrapalo{background:#fbeee6;color:#9a4a1f;border-color:rgba(154,74,31,.18)}
+html[data-sc] .os-chip-manual{background:#efeae4;color:var(--sc-brown);border-color:rgba(129,97,67,.2)}
+
+html[data-sc] details.os-sync-panel>summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+}
+html[data-sc] details.os-sync-panel>summary::-webkit-details-marker{display:none}
+html[data-sc] details.os-sync-panel>summary h2{margin:0!important}
+html[data-sc] details.os-sync-panel>summary::after{
+  content:"";width:9px;height:9px;border-right:1.6px solid var(--sc-muted);border-bottom:1.6px solid var(--sc-muted);
+  transform:rotate(45deg);transition:transform .2s;margin-left:auto;
+}
+html[data-sc] details.os-sync-panel[open]>summary::after{transform:rotate(-135deg)}
+html[data-sc] details.os-sync-panel[open]>summary{margin-bottom:10px}
+
+@media (max-width:750px){
+  /* Cada reserva como tarjeta: nombre arriba, datos en dos columnas y botón a lo ancho */
+  html[data-sc] .os-table:has(.os-res-row) thead{display:none}
+  html[data-sc] .os-table:has(.os-res-row),html[data-sc] .os-table:has(.os-res-row) tbody{display:block}
+  html[data-sc] .os-tablewrap:has(.os-res-row){border:0;overflow:visible}
+  html[data-sc] tr.os-res-row{
+    display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding:14px;margin-bottom:10px;
+    background:#fff;border:1px solid var(--sc-line);border-radius:14px;box-shadow:var(--sc-shadow);
+  }
+  html[data-sc] tr.os-res-row td{display:block;padding:0!important;border:0!important;font-size:13.5px}
+  html[data-sc] tr.os-res-row td::before{
+    content:attr(data-label);display:block;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--sc-muted);margin-bottom:2px;
+  }
+  html[data-sc] tr.os-res-row td[data-label=""]::before{display:none}
+  html[data-sc] tr.os-res-row td:first-child{grid-column:1/-1;font-size:15.5px}
+  html[data-sc] tr.os-res-row td:first-child::before{display:none}
+  html[data-sc] tr.os-res-row td:last-child{grid-column:1/-1;margin-top:6px}
+  html[data-sc] tr.os-res-row td:last-child .os-btn{width:100%}
+}
+@media (min-width:751px){
+  html[data-sc] .os-actions>select,html[data-sc] .os-actions>input:not([type=checkbox]){width:auto!important;min-width:180px;flex:0 1 220px}
+}
