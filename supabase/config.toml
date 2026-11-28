@@ -3,3 +3,9 @@ project_id = "stiucnalemcwedlreaux"
 [functions.shopify-financial-recovery]
 entrypoint = "./functions/shopify-financial-recovery/index.js"
 verify_jwt = false
+
+[functions.soap-shopify-order-sync]
+verify_jwt = false
+
+[functions.soap-shopify-webhook]
+verify_jwt = false

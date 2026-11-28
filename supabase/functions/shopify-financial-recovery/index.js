@@ -1,4 +1,7 @@
-import { validateOrder } from "./validate-order.js";
+import { reviewReason, toImportRow } from "./validate-order.js";
+
+const PAGE = 40;
+const MAX_PAGES = 10;
 
 const query = `query RecoverWorkshopFinancials($ids: [ID!]!) {
   nodes(ids: $ids) {
@@ -20,8 +23,8 @@ function reply(status, data) {
 }
 
 async function fetchJson(url, options) {
-  const response = await fetch(url, { ...options, signal: AbortSignal.timeout(12000) });
-  if (!response.ok) throw new Error("Upstream request failed");
+  const response = await fetch(url, { ...options, signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error("http_" + response.status);
   return response.json();
 }
 
@@ -47,18 +50,27 @@ async function shopifyToken(shop) {
   return data.access_token;
 }
 
+function authorized(request, key) {
+  if (key && request.headers.get("authorization") === "Bearer " + key) return true;
+  const cron = Deno.env.get("SHOPIFY_RECOVERY_CRON_TOKEN");
+  return !!cron && cron.length >= 24 && request.headers.get("x-recovery-cron-token") === cron;
+}
+
 Deno.serve(async (request) => {
   if (request.method !== "POST") return reply(405, { error: "method_not_allowed" });
 
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const base = Deno.env.get("SUPABASE_URL");
   const shop = Deno.env.get("SHOPIFY_SHOP_DOMAIN")?.toLowerCase();
-  if (!key || request.headers.get("authorization") !== "Bearer " + key) {
-    return reply(401, { error: "unauthorized" });
-  }
-  if (!base || !shop || !/^[a-z0-9-]+\.myshopify\.com$/.test(shop)) {
+  if (!authorized(request, key)) return reply(401, { error: "unauthorized" });
+  if (!base || !key || !shop || !/^[a-z0-9-]+\.myshopify\.com$/.test(shop)) {
     return reply(503, { error: "integration_not_configured" });
   }
+
+  // Writes only with {"apply": true}; anything else is a dry run.
+  let apply = false;
+  try { apply = (await request.json())?.apply === true; } catch { /* empty body = dry run */ }
+
   let token;
   try {
     token = await shopifyToken(shop);
@@ -66,42 +78,66 @@ Deno.serve(async (request) => {
     return reply(503, { error: "shopify_token_unavailable", stage: error.message });
   }
 
-  // Preview only during the parallel comparison. This worker performs no writes.
-  try {
-    const candidates = await fetchJson(base + "/rest/v1/rpc/os_shopify_financial_recovery_candidates", {
-      method: "POST",
-      headers: {
-        apikey: key, authorization: "Bearer " + key, "content-type": "application/json",
-        range: "0-39", "range-unit": "items",
-      },
-      body: "{}",
-    });
-    if (!Array.isArray(candidates)) throw new Error("Invalid candidate response");
+  const db = (path, body, range) => fetchJson(base + "/rest/v1/rpc/" + path, {
+    method: "POST",
+    headers: {
+      apikey: key, authorization: "Bearer " + key, "content-type": "application/json",
+      ...(range ? { range, "range-unit": "items" } : {}),
+    },
+    body: JSON.stringify(body),
+  });
 
-    // An empty queue still probes the shop credential via a read-only order query.
-    const ids = candidates.map(({ gid }) => gid);
-    const result = await fetchJson("https://" + shop + "/admin/api/2026-10/graphql.json", {
-      method: "POST",
-      headers: { "x-shopify-access-token": token, "content-type": "application/json" },
-      body: JSON.stringify(ids.length ? { query, variables: { ids } } : {
-        query: "{ orders(first: 1) { nodes { id } } }",
-      }),
-    });
-    if (result.errors?.length) throw new Error("Shopify query failed");
-    if (!ids.length && !Array.isArray(result.data?.orders?.nodes)) {
-      throw new Error("Invalid Shopify probe response");
+  const totals = { mode: apply ? "apply" : "dry_run", candidates: 0, eligible: 0, needs_review: 0, restored: 0, pages: 0 };
+  try {
+    // Candidates are a stable ordered list; page through it by offset so ineligible
+    // rows (which stay in the list) cannot cause an endless loop.
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const from = page * PAGE;
+      const candidates = await db("os_shopify_financial_recovery_candidates", {}, `${from}-${from + PAGE - 1}`);
+      if (!Array.isArray(candidates)) throw new Error("invalid_candidates");
+      totals.pages++;
+      if (!candidates.length) {
+        if (page === 0) {
+          const probe = await fetchJson("https://" + shop + "/admin/api/2026-10/graphql.json", {
+            method: "POST",
+            headers: { "x-shopify-access-token": token, "content-type": "application/json" },
+            body: JSON.stringify({ query: "{ orders(first: 1) { nodes { id } } }" }),
+          });
+          if (probe.errors?.length || !Array.isArray(probe.data?.orders?.nodes)) throw new Error("shopify_probe_failed");
+        }
+        break;
+      }
+
+      const ids = candidates.map(({ gid }) => gid);
+      const result = await fetchJson("https://" + shop + "/admin/api/2026-10/graphql.json", {
+        method: "POST",
+        headers: { "x-shopify-access-token": token, "content-type": "application/json" },
+        body: JSON.stringify({ query, variables: { ids } }),
+      });
+      if (result.errors?.length) throw new Error("shopify_query_failed");
+      const orders = result.data?.nodes;
+      if (!Array.isArray(orders) || orders.length !== candidates.length) throw new Error("incomplete_shopify_response");
+
+      const byId = new Map(orders.filter(Boolean).map((order) => [order.id, order]));
+      const rows = candidates.map((candidate) => {
+        const order = byId.get(candidate.gid);
+        const reason = reviewReason(order, candidate);
+        return reason ? { gid: candidate.gid, review_reason: reason } : toImportRow(order);
+      });
+      const eligible = rows.filter((row) => !row.review_reason).length;
+      totals.candidates += candidates.length;
+      totals.eligible += eligible;
+      totals.needs_review += candidates.length - eligible;
+
+      if (apply) {
+        const [outcome] = await db("os_import_shopify_financials_api", { p_orders: rows });
+        totals.restored += Number(outcome?.restored ?? 0);
+      }
+      if (candidates.length < PAGE) break;
     }
-    const orders = result.data?.nodes ?? [];
-    if (!Array.isArray(orders) || orders.length !== candidates.length) {
-      throw new Error("Incomplete Shopify response");
-    }
-    const byId = new Map(orders.filter(Boolean).map((order) => [order.id, order]));
-    const eligible = candidates.filter((candidate) => validateOrder(byId.get(candidate.gid), candidate)).length;
-    return reply(200, {
-      mode: "dry_run", candidates: candidates.length, eligible,
-      needs_review: candidates.length - eligible, limit_reached: candidates.length === 40,
-    });
-  } catch {
-    return reply(502, { error: "recovery_preview_failed" });
+    return reply(200, totals);
+  } catch (error) {
+    console.error("shopify-financial-recovery", error.message);
+    return reply(502, { error: "recovery_failed", stage: error.message, ...totals });
   }
 });
