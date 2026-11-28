@@ -47,6 +47,32 @@ Deno.serve(async (req) => {
   let token: string;
   try { token = await shopifyToken(shop); } catch (e) { return json({ ok: false, error: "shopify_token_unavailable", stage: (e as Error).message }, 503); }
 
+  // Alta idempotente de webhooks de pedidos hacia soap-shopify-webhook.
+  if ((body as { register_webhooks?: boolean }).register_webhooks === true) {
+    const callbackUrl = supa.replace(/\/$/, "") + "/functions/v1/soap-shopify-webhook";
+    const gql = async (query: string, variables = {}) => (await fetch("https://" + shop + "/admin/api/2026-10/graphql.json", {
+      method: "POST",
+      headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(15000),
+    })).json();
+    const current = await gql("{webhookSubscriptions(first:50){nodes{topic endpoint{... on WebhookHttpEndpoint{callbackUrl}}}}}");
+    const have = new Set((current.data?.webhookSubscriptions?.nodes ?? [])
+      // deno-lint-ignore no-explicit-any
+      .filter((n: any) => n.endpoint?.callbackUrl === callbackUrl).map((n: any) => n.topic));
+    const results: Record<string, string> = {};
+    for (const topic of ["ORDERS_CREATE", "ORDERS_UPDATED", "REFUNDS_CREATE"]) {
+      if (have.has(topic)) { results[topic] = "exists"; continue; }
+      const r = await gql(
+        "mutation($t:WebhookSubscriptionTopic!,$s:WebhookSubscriptionInput!){webhookSubscriptionCreate(topic:$t,webhookSubscription:$s){webhookSubscription{id} userErrors{message}}}",
+        { t: topic, s: { callbackUrl, format: "JSON" } },
+      );
+      const errs = r.errors?.map((e: { message: string }) => e.message) ?? r.data?.webhookSubscriptionCreate?.userErrors?.map((e: { message: string }) => e.message) ?? [];
+      results[topic] = errs.length ? "error: " + errs.join("; ") : "created";
+    }
+    return json({ ok: Object.values(results).every((v) => !v.startsWith("error")), results });
+  }
+
   // Diagnóstico: suscripciones de webhook de esta app (solo lectura, sin datos de clientes).
   if ((body as { webhooks?: boolean }).webhooks === true) {
     const r = await fetch("https://" + shop + "/admin/api/2026-10/graphql.json", {
