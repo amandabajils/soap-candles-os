@@ -40,3 +40,7 @@ Se eligió una recuperación determinista de Shopify mediante GraphQL y SQL. La 
 Antes de habilitar escrituras, comprueba una lectura autenticada de la tienda por el servidor y compara pedidos de prueba elegibles y ambiguos. Implementa el consumo completo con paginación y un RPC idempotente que registre el origen de la API directa. El RPC legado registra como procedencia el conector. Separa la recuperación financiera de la ingesta de ventas y de sus cambios. Verifica un ciclo completo de alta, cambios, devoluciones y reintentos. Aplica las migraciones desde una sola revisión y verifica que dos procesos no registran la misma operación.
 
 Para Atrápalo, confirma acceso de lectura de titularidad del negocio a los correos o a una API de partner. Usa una bandeja duradera, deduplicación por mensaje y localizador, orden temporal, cuarentena y comparación en paralelo. Completa el inventario privado de fuentes y adapta allí las excepciones verificadas. Confirma por separado la cobertura de la extranet y la captación desde correos de Cowlendar.
+
+## Registro de verificación
+
+- 28/11/2026 · `shopify-financial-recovery` v3 desplegada desde esta rama (`supabase/config.toml` fija la entrada `index.js`). La función obtiene el token con *client credentials* de la app de la tienda (`SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_SHOP_DOMAIN`) y exige el scope `read_orders`. Invocación con la clave secreta de servidor: HTTP 200, `dry_run`, 0 candidatos. Sin escrituras. Vuelta atrás: volver a desplegar la versión anterior desde el historial de la función.
